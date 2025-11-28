@@ -1,5 +1,5 @@
+import React, { useState } from 'react';
 import { polygonAreaMeters } from '@/lib/utils';
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,6 @@ import LayerToggle from './LayerToggle';
 import PlotDrawer from './PlotDrawer';
 import { WeatherData, WeatherAlert } from '@/lib/weather-api';
 import { PollingInterval } from '@/hooks/usePolling';
-import React from 'react';
 
 interface SidebarProps {
   weather: WeatherData | null;
@@ -37,15 +36,22 @@ interface SidebarProps {
     clouds: boolean;
   };
   onLayerChange: (layer: keyof SidebarProps['layers'], value: boolean) => void;
-  showHeatmap: boolean;
-  onHeatmapChange: (value: boolean) => void;
-  isDrawingPlot: boolean;
-  onToggleDrawingPlot: () => void;
-  onClearPlot: () => void;
-  onSavePlot: () => void;
-  plotPointsCount: number;
-  // new: import coordinates as plot points
+
+  // plotting / heatmap props (optional)
+  showHeatmap?: boolean;
+  onHeatmapChange?: (value: boolean) => void;
+
+  isDrawingPlot?: boolean;
+  onToggleDrawingPlot?: () => void;
+  onClearPlot?: () => void;
+  onSavePlot?: () => void;
+  plotPointsCount?: number;
+
+  // import coordinates -> parent will receive points as [lon, lat][]
   onImportPlotPoints?: (points: [number, number][]) => void;
+
+  // optional handler: center map on lat/lon
+  onGoToLocation?: (lat: number, lon: number) => void;
 }
 
 export default function Sidebar({
@@ -67,7 +73,8 @@ export default function Sidebar({
   onClearPlot,
   onSavePlot,
   plotPointsCount,
-  onImportPlotPoints
+  onImportPlotPoints,
+  onGoToLocation
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('stats');
@@ -185,6 +192,11 @@ export default function Sidebar({
                         Cole um array JSON de coordenadas [lon, lat] (ex: [[-63.9,-8.76], [-63.91,-8.76], ...])
                       </p>
                       <CoordsAreaCalculator onImport={onImportPlotPoints} />
+
+                      {/* New: small component to search by lat/lon and center the map */}
+                      <div className="mt-4 p-3 border rounded-md bg-muted/50">
+                        <LocationSearch onGoTo={onGoToLocation} />
+                      </div>
                     </div>
                   </div>
                 </TabsContent>
@@ -243,9 +255,9 @@ function CoordsAreaCalculator({ onImport }: { onImport?: (points: [number, numbe
       setError('Valide as coordenadas primeiro.');
       return;
     }
-    if (typeof (arguments as any) !== 'undefined') { /* noop to keep linter calm */ }
-    // call parent importer if provided (Sidebar passes onImport)
-    (CoordsAreaCalculator as any).__parentImport?.(parsedCoords);
+    if (typeof onImport === 'function') {
+      onImport(parsedCoords);
+    }
   };
 
   return (
@@ -257,24 +269,19 @@ function CoordsAreaCalculator({ onImport }: { onImport?: (points: [number, numbe
         onChange={(e) => setCoordsInput(e.target.value)}
       />
       <div className="flex gap-2 mt-2">
-        <Button onClick={handleCalculate}>Calcular área</Button>
-        <Button variant="ghost" onClick={() => { setCoordsInput(''); setArea(null); setError(null); }}>
-          Limpar
-        </Button>
-        <Button
-          onClick={() => {
-            if (typeof (CoordsAreaCalculator as any).__parentImport === 'function') {
-              if (!parsedCoords) {
-                setError('Valide as coordenadas primeiro.');
-                return;
-              }
-              (CoordsAreaCalculator as any).__parentImport(parsedCoords);
-            }
-          }}
-          disabled={!parsedCoords}
-        >
-          Inserir como pontos
-        </Button>
+        <div className="w-full flex flex-col sm:flex-row gap-2">
+          <Button className="w-full sm:w-auto" onClick={handleCalculate}>Calcular área</Button>
+          <Button variant="ghost" className="w-full sm:w-auto" onClick={() => { setCoordsInput(''); setArea(null); setError(null); }}>
+            Limpar
+          </Button>
+          <Button
+            className="w-full sm:w-auto"
+            onClick={handleImport}
+            disabled={!parsedCoords}
+          >
+            Inserir como pontos
+          </Button>
+        </div>
       </div>
       {area !== null && (
         <p className="mt-2 text-sm">
@@ -286,11 +293,78 @@ function CoordsAreaCalculator({ onImport }: { onImport?: (points: [number, numbe
   );
 }
 
-// attach a runtime hook so parent can set import handler without changing closure
-// parent (Sidebar) will assign this if it received onImportPlotPoints prop
-function attachImportHandler(fn?: (p: [number, number][]) => void) {
-  (CoordsAreaCalculator as any).__parentImport = fn ?? undefined;
+// New: small component to search by lat/lon and center the map
+function LocationSearch({ onGoTo }: { onGoTo?: (lat: number, lon: number) => void }) {
+  const [latText, setLatText] = useState('');
+  const [lonText, setLonText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGo = () => {
+    setError(null);
+    const lat = Number(latText.replace(',', '.').trim());
+    const lon = Number(lonText.replace(',', '.').trim());
+    if (Number.isNaN(lat) || Number.isNaN(lon)) {
+      setError('Latitude e longitude devem ser números válidos.');
+      return;
+    }
+    if (lat < -90 || lat > 90) {
+      setError('Latitude fora do intervalo (-90..90).');
+      return;
+    }
+    if (lon < -180 || lon > 180) {
+      setError('Longitude fora do intervalo (-180..180).');
+      return;
+    }
+
+    if (typeof onGoTo === 'function') {
+      onGoTo(lat, lon);
+      return;
+    }
+    const w = window as any;
+    if (typeof w.goToMap === 'function') {
+      w.goToMap(lat, lon);
+      return;
+    }
+    if (typeof w.__mapFlyTo === 'function') {
+      w.__mapFlyTo(lat, lon);
+      return;
+    }
+
+    setError('Função de centralizar mapa não encontrada. Abra o console para ver instruções.');
+  };
+
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium">Procurar localização (lat / lon)</label>
+      <div className="flex gap-2">
+        <input
+          className="w-1/2 p-2 rounded border text-sm"
+          placeholder="Latitude (ex: -8.7619)"
+          value={latText}
+          onChange={(e) => setLatText(e.target.value)}
+        />
+        <input
+          className="w-1/2 p-2 rounded border text-sm"
+          placeholder="Longitude (ex: -63.9039)"
+          value={lonText}
+          onChange={(e) => setLonText(e.target.value)}
+        />
+      </div>
+      <div className="flex gap-2">
+        <button onClick={handleGo} className="px-3 py-1 rounded bg-primary text-white text-sm">
+          Centralizar
+        </button>
+        <button
+          onClick={() => { setLatText(''); setLonText(''); setError(null); }}
+          className="px-3 py-1 rounded border text-sm"
+        >
+          Limpar
+        </button>
+      </div>
+      {error && <p className="text-sm text-rose-500 mt-1">{error}</p>}
+      <p className="text-xs text-muted-foreground mt-1">
+        Dica: insira latitude e longitude separadas por ponto (.) ou vírgula (ex: -8.7619, -63.9039).
+      </p>
+    </div>
+  );
 }
-// when Sidebar mounts, attach the handler
-// ensure attach runs: call it here (Sidebar scope) so parent prop is wired
-attachImportHandler((typeof (undefined) !== 'undefined') ? undefined : undefined);

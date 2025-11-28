@@ -52,8 +52,8 @@ export default function MapView({
     if (!mapContainer.current || map.current) return;
 
     // Porto Velho - Estrada de Ferro Madeira-Mamoré
-    const initialLat = -8.7619;
-    const initialLon = -63.9039;
+    const initialLat = -10.2926;
+    const initialLon = -65.2979;
 
     map.current = new maplibregl.Map({
       container: mapContainer.current,
