@@ -162,7 +162,11 @@ export default function MapView({
       cursor: pointer;
       transition: transform 0.2s;
     `;
-    el.textContent = `${Math.round(weather.temperature)}°`;
+    // Remove visible number/text from the marker:
+    el.textContent = '';
+    // If you still want a tooltip on hover, set title instead:
+    // el.setAttribute('title', `${Math.round(weather.temperature)}°`);
+
     el.onmouseenter = () => el.style.transform = 'scale(1.1)';
     el.onmouseleave = () => el.style.transform = 'scale(1)';
 
@@ -284,7 +288,7 @@ export default function MapView({
     plotMarkersRef.current = [];
 
     // Add markers for each point
-    plotPoints.forEach((point) => {
+    plotPoints.forEach((point, index) => {
       const el = document.createElement('div');
       el.className = 'plot-marker';
       el.style.cssText = `
@@ -296,9 +300,21 @@ export default function MapView({
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         cursor: pointer;
         z-index: 1000;
+        display: block;
       `;
-      
-      const m = new maplibregl.Marker({ element: el })
+
+      // ensure no visible label: remove text, title and any data attribute
+      el.textContent = '';
+      el.innerHTML = '';
+      el.removeAttribute('title');
+      el.removeAttribute('data-index');
+      el.setAttribute('aria-hidden', 'true');
+
+      // extra safety: hide any text rendered by CSS by forcing font-size/line-height to zero
+      el.style.fontSize = '0px';
+      el.style.lineHeight = '0';
+
+      const m = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat(point)
         .addTo(map.current!);
       plotMarkersRef.current.push(m);

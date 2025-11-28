@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { polygonAreaMeters } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,9 @@ import {
   X, 
   Home, 
   Bell,
-  CloudSun
+  CloudSun,
+  Sun,
+  Moon
 } from 'lucide-react';
 import WeatherStats from './WeatherStats';
 import AlertsPanel from './AlertsPanel';
@@ -78,6 +80,30 @@ export default function Sidebar({
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('stats');
+
+  // dark mode state persisted in localStorage
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try {
+      const val = localStorage.getItem('theme');
+      if (val) return val === 'dark';
+      // fallback: prefer dark if user OS prefers dark
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (darkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      }
+    } catch {}
+  }, [darkMode]);
 
   return (
     <>
@@ -202,6 +228,23 @@ export default function Sidebar({
                 </TabsContent>
               </div>
             </Tabs>
+
+            {/* Footer: dark mode toggle */}
+            <div className="p-4 border-t border-border flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setDarkMode(d => !d)}
+                  aria-label="Alternar tema"
+                  className="p-2 rounded-full bg-muted/60 hover:bg-muted/80 flex items-center justify-center"
+                >
+                  {darkMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                </button>
+                <div className="text-sm">
+                  <div className="font-medium">{darkMode ? 'Dark' : 'Light'}</div>
+                  <div className="text-xs text-muted-foreground">Tema</div>
+                </div>
+              </div>
+            </div>
           </motion.aside>
         )}
       </AnimatePresence>
