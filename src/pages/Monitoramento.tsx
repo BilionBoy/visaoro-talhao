@@ -4,15 +4,18 @@ import MapView from "@/components/MapView";
 import usePolygons, { SavedPlot } from "@/hooks/usePolygons";
 import { PollingInterval } from "@/hooks/usePolling";
 import { WeatherData, WeatherAlert } from "@/lib/weather-api";
+import { useWeather } from '@/hooks/useWeather'; // <-- added
 
 export default function Monitoramento() {
   const { polygons } = usePolygons();
   const [isDrawingPlot, setIsDrawingPlot] = useState(false);
   const [plotPoints, setPlotPoints] = useState<[number, number][]>([]);
 
-  // mock states required by Sidebar (replace with your real data where appropriate)
-  const [weather] = useState<WeatherData | null>(null);
-  const [loading] = useState(false);
+  // track currently selected plot (from "Mostrar")
+  const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
+
+  // use real weather hook so we can fetch/update when showing a saved plot
+  const { weather, loading, fetchWeather } = useWeather();
   const [interval] = useState<PollingInterval>(null);
 
   // Alerts state (use WeatherAlert so AlertsPanel receives correct type)
@@ -23,11 +26,10 @@ export default function Monitoramento() {
       const p = polygons[0] as SavedPlot;
       const demo: WeatherAlert = {
         id: `demo-${p.id}`,
-        type: "rain", // categoria genérica
-        severity: "danger", // vermelho
+        type: "rain",
+        severity: "danger",
         message: "Chuva nas próximas 6 horas",
         timestamp: new Date().toISOString(),
-        // se WeatherAlert tem outros campos opcionais, deixe-os indefinidos
       } as unknown as WeatherAlert;
 
       setAlerts((prev) => {
@@ -64,6 +66,7 @@ export default function Monitoramento() {
         <Sidebar
           weather={weather}
           loading={loading}
+          selectedPlotId={selectedPlotId}
           alerts={alerts}
           onRemoveAlert={handleRemoveAlert}
           onClearAlerts={handleClearAlerts}
@@ -84,14 +87,24 @@ export default function Monitoramento() {
             setPlotPoints(p);
             setIsDrawingPlot(true);
           }}
-          onGoToLocation={() => {}}
+          // when Sidebar clicks "Mostrar" it will call this to update weather
+          onGoToLocation={async (lat, lon, plotId?: string) => {
+            try {
+              // mark selected plot immediately so Sidebar can highlight it
+              if (plotId) setSelectedPlotId(plotId);
+              // await the fetch so loading state is meaningful to consumers
+              await fetchWeather(lat, lon);
+            } catch (err) {
+              // ignore for now; you can add toast on error
+            }
+          }}
         />
       </aside>
 
       <main className="flex-1 relative">
         <MapView
           weather={weather}
-          onLocationChange={() => {}}
+          onLocationChange={(lat, lon) => { try { fetchWeather(lat, lon); } catch {} }}
           showHeatmap={false}
           layers={{ rain: false, wind: false, temperature: false, clouds: false }}
           isDrawingPlot={isDrawingPlot}

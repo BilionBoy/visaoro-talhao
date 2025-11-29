@@ -57,9 +57,13 @@ interface SidebarProps {
   onImportPlotPoints?: (points: [number, number][]) => void;
 
   // optional handler: center map on lat/lon
-  onGoToLocation?: (lat: number, lon: number) => void;
+  // allow optional plotId so Sidebar can pass which plot triggered the request
+  onGoToLocation?: (lat: number, lon: number, plotId?: string) => void;
 
   plotPoints?: [number, number][]; // added: current drawing points (lon, lat)
+
+  // id do talhão atualmente selecionado (para destacar / mostrar loading)
+  selectedPlotId?: string;
 }
 
 export default function Sidebar({
@@ -83,6 +87,7 @@ export default function Sidebar({
   onImportPlotPoints,
   onGoToLocation,
   plotPoints = [],
+  selectedPlotId,
 }: SidebarProps) {
 
   // --- ADDED: estado/handlers para abrir e salvar o modal ---
@@ -297,6 +302,12 @@ export default function Sidebar({
               <div className="flex-1 overflow-hidden">
                 <TabsContent value="stats" className="h-full m-0">
                   <div className="h-full overflow-y-auto hide-scrollbar p-4">
+                    {/* show small banner when fetching data for a selected talhão */}
+                    {loading && selectedPlotId && (
+                      <div className="mb-3 p-2 rounded text-sm bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                        Buscando dados do talhão...
+                      </div>
+                    )}
                     <WeatherStats weather={weather} loading={loading} />
                   </div>
                 </TabsContent>
@@ -444,7 +455,7 @@ export default function Sidebar({
 
                                     // Update parent/map state: request parent to fetch/update weather for this plot
                                     if (typeof onGoToLocation === 'function') {
-                                      try { onGoToLocation(p.centroid.lat, p.centroid.lon); } catch {}
+                                      try { onGoToLocation(p.centroid.lat, p.centroid.lon, p.id); } catch {}
                                     }
 
                                     // try typical flyTo helpers (try different argument orders)
@@ -759,80 +770,127 @@ function SavePlotForm({ points, onSave, onCancel }: { points: [number, number][]
 }
 
 // New: Save plot modal component
-function SavePlotModal({ open, onClose, onSave, coords, defaultName }: { open: boolean; onClose: () => void; onSave: (payload: any) => void; coords: [number, number][] | null; defaultName?: string }) {
+function SavePlotModal({
+  open,
+  onClose,
+  onSave,
+  coords,
+  defaultName
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (val: { name?: string; area_m2: number; lat: number; lon: number; color: string }) => void;
+  coords: [number, number][] | null;
+  defaultName?: string;
+}) {
   const [name, setName] = useState('');
-  const [color, setColor] = useState('#ff0000');
-  const [area, setArea] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [area, setArea] = useState<number>(0);
+  const [lat, setLat] = useState<string>('');
+  const [lon, setLon] = useState<string>('');
+  const [color, setColor] = useState<string>('#22c55e');
 
   useEffect(() => {
-    if (open) {
-      setName(defaultName ?? '');
-      setColor('#ff0000');
-      setError(null);
-
-      if (coords && coords.length > 0) {
-        const a = polygonAreaMeters(coords);
-        setArea(a);
-      } else {
-        setArea(null);
-      }
-    }
+    if (!open) return;
+    if (defaultName) setName(defaultName);
+    if (!coords || coords.length === 0) return;
+    const a = polygonAreaMeters(coords);
+    setArea(Math.round(a * 100) / 100); // keep two decimals
+    const lonAvg = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+    const latAvg = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+    setLat(String(latAvg));
+    setLon(String(lonAvg));
   }, [open, coords, defaultName]);
-
-  const handleSubmit = () => {
-    setError(null);
-    if (name.trim().length === 0) {
-      setError('Nome é obrigatório.');
-      return;
-    }
-    if (typeof onSave === 'function') {
-      onSave({ name, color, area_m2: area ?? 0, lat: 0, lon: 0 }); // area/centroid will be updated on the server
-    }
-  };
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md p-6 bg-background rounded-lg shadow-lg">
-        <h3 className="text-lg font-semibold mb-4">Salvar Talhão</h3>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Nome</label>
-            <input
-              className="w-full p-2 text-sm rounded border"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nome do talhão"
-            />
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative z-50 w-full max-w-md">
+        <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-6 rounded-2xl shadow-xl border border-border">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h3 className="font-semibold text-lg">Salvar Talhão</h3>
+              <p className="text-xs text-muted-foreground mt-1">Revise e salve as informações do talhão.</p>
+            </div>
+            <button onClick={onClose} aria-label="Fechar" className="ml-4 text-muted-foreground hover:text-foreground">
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Cor</label>
-            <input
-              type="color"
-              className="w-full p-0.5 rounded"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-            />
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Nome do talhão</label>
+              <input
+                className="w-full p-2 rounded-md border border-border bg-white/60 dark:bg-slate-800 text-black"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nome do talhão"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Área (m²)</label>
+                <input
+                  type="number"
+                  className="w-full p-2 rounded-md border border-border bg-white/60 dark:bg-slate-800 text-black"
+                  value={area}
+                  onChange={(e) => setArea(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground mt-1 text-black">Hectares: {(Number(area) / 10000).toFixed(4)} ha</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium mb-1">Cor do talhão</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="w-10 h-10 p-0 border-0 bg-transparent cursor-pointer"
+                    aria-label="Cor do talhão"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium truncate" style={{ color }}>{color}</div>
+                    <div className="text-xs text-muted-foreground">Cor visível no mapa</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Latitude (centro)</label>
+                <input
+                  className="w-full p-2 rounded-md border border-border bg-white/60 dark:bg-slate-800 text-black"
+                  value={lat}
+                  onChange={(e) => setLat(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Longitude (centro)</label>
+                <input
+                  className="w-full p-2 rounded-md border border-border bg-white/60 dark:bg-slate-800 text-black"
+                  value={lon}
+                  onChange={(e) => setLon(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
 
-          {/*
-            Show computed area and centroid based on the current points.
-            These values are for information only; the user can adjust them later in the settings.
-          */}
-          <div className="text-sm text-muted-foreground">
-            <p>Área aproximada: {(polygonAreaMeters(coords ?? []) ?? 0).toFixed(2)} m²</p>
-            <p>Centróide: {coords && coords.length > 0 ? `${coords[0][1].toFixed(4)}, ${coords[0][0].toFixed(4)}` : 'Calculando...'}</p>
-          </div>
-
-          {error && <p className="text-sm text-rose-500">{error}</p>}
-
-          <div className="flex gap-2">
-            <Button className="flex-1" onClick={handleSubmit}>Salvar Talhão</Button>
-            <Button variant="ghost" className="flex-1" onClick={onClose}>Cancelar</Button>
+          <div className="mt-5 flex items-center justify-end gap-3">
+            <button className="px-4 py-2 rounded-md border text-sm" onClick={onClose}>Cancelar</button>
+            <button
+              className="px-4 py-2 rounded-md bg-primary text-white text-sm"
+              onClick={() => {
+                const latN = Number(String(lat).replace(',', '.'));
+                const lonN = Number(String(lon).replace(',', '.'));
+                onSave({ name, area_m2: Math.max(0, Number(area)), lat: latN, lon: lonN, color });
+              }}
+            >
+              Salvar talhão
+            </button>
           </div>
         </div>
       </div>
