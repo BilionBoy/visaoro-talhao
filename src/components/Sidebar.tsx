@@ -697,78 +697,6 @@ function LocationSearch({ onGoTo }: { onGoTo?: (lat: number, lon: number) => voi
   );
 }
 
-// New: Save plot form component
-function SavePlotForm({ points, onSave, onCancel }: { points: [number, number][]; onSave: (payload: any) => void; onCancel: () => void }) {
-  const [name, setName] = useState('');
-  const [color, setColor] = useState('#ff0000');
-  const [centroid, setCentroid] = useState<{ lat: number; lon: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (points.length > 0) {
-      // set initial centroid based on the provided points
-      const lonAvg = points.reduce((s, c) => s + c[0], 0) / points.length;
-      const latAvg = points.reduce((s, c) => s + c[1], 0) / points.length;
-      setCentroid({ lon: lonAvg, lat: latAvg });
-    }
-  }, [points]);
-
-  const handleSubmit = () => {
-    setError(null);
-    if (name.trim().length === 0) {
-      setError('Nome é obrigatório.');
-      return;
-    }
-    if (typeof onSave === 'function') {
-      onSave({ name, color, area_m2: 0, lat: 0, lon: 0 }); // area/centroid will be updated on the server
-    }
-  };
-
-  return (
-    <div className="p-4">
-      <h3 className="text-lg font-semibold mb-4">Salvar Talhão</h3>
-
-      <div className="space-y-2">
-        <div>
-          <label className="block text-sm font-medium mb-1">Nome</label>
-          <input
-            className="w-full p-2 text-sm rounded border"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nome do talhão"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Cor</label>
-          <input
-            type="color"
-            className="w-full p-0.5 rounded"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-          />
-        </div>
-
-        {/*
-          Show computed area and centroid based on the current points.
-          These values are for information only; the user can adjust them later in the settings.
-        */}
-        <div className="text-sm text-muted-foreground">
-          <p>Área aproximada: {(polygonAreaMeters(points) ?? 0).toFixed(2)} m²</p>
-          <p>Centróide: {centroid ? `${centroid.lat.toFixed(4)}, ${centroid.lon.toFixed(4)}` : 'Calculando...'}</p>
-        </div>
-
-        {error && <p className="text-sm text-rose-500">{error}</p>}
-
-        <div className="flex gap-2">
-          <Button className="flex-1" onClick={handleSubmit}>Salvar Talhão</Button>
-          <Button variant="ghost" className="flex-1" onClick={onCancel}>Cancelar</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // New: Save plot modal component
 function SavePlotModal({
   open,
@@ -822,7 +750,7 @@ function SavePlotModal({
             <div>
               <label className="block text-xs font-medium mb-1">Nome do talhão</label>
               <input
-                className="w-full p-2 rounded-md border border-border bg-white/60 dark:bg-slate-800 text-black"
+                className="w-full p-2 text-sm rounded border border-border bg-white/60 dark:bg-slate-800 text-black"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Nome do talhão"
@@ -838,7 +766,12 @@ function SavePlotModal({
                   value={area}
                   onChange={(e) => setArea(Number(e.target.value))}
                 />
-                <p className="text-xs text-muted-foreground mt-1 text-black">Hectares: {(Number(area) / 10000).toFixed(4)} ha</p>
+                <p
+                  className="text-xs mt-1"
+                  style={{ color: 'var(--muted, #6b7280)' }}
+                >
+                  Hectares: {((area ?? 0) / 10000).toFixed(4)} ha
+                </p>
               </div>
 
               <div>
@@ -851,10 +784,6 @@ function SavePlotModal({
                     className="w-10 h-10 p-0 border-0 bg-transparent cursor-pointer"
                     aria-label="Cor do talhão"
                   />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium truncate" style={{ color }}>{color}</div>
-                    <div className="text-xs text-muted-foreground">Cor visível no mapa</div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -878,7 +807,6 @@ function SavePlotModal({
               </div>
             </div>
           </div>
-
           <div className="mt-5 flex items-center justify-end gap-3">
             <button className="px-4 py-2 rounded-md border text-sm" onClick={onClose}>Cancelar</button>
             <button

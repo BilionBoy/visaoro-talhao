@@ -13,6 +13,36 @@ function generateHistoryFromNow(base: number | undefined, points = 24, variance 
   }));
 }
 
+// --- NEW: soil moisture + wind helpers ---
+function generateSoilMoistureFromHumidity(humidity: number | undefined, points = 24) {
+  const base = typeof humidity === "number" ? humidity * 0.65 : 40;
+  const now = Date.now();
+  const step = 60 * 60 * 1000;
+  return new Array(points).fill(0).map((_, i) => ({
+    ts: now - (points - 1 - i) * step,
+    value: +(base + Math.sin(i / 4) * 5 + (Math.random() - 0.5) * 4).toFixed(1),
+  }));
+}
+
+function generateWindGustHistory(baseWind: number | undefined, points = 24) {
+  const b = typeof baseWind === "number" ? Math.max(0, baseWind) : 5;
+  const now = Date.now();
+  const step = 60 * 60 * 1000;
+  return new Array(points).fill(0).map((_, i) => ({
+    ts: now - (points - 1 - i) * step,
+    value: +(b * (1 + Math.abs(Math.sin(i / 2))) + Math.random() * 4).toFixed(1),
+  }));
+}
+
+function estimateStrongWindProbability(gustHistory: number[]) {
+  if (!gustHistory || gustHistory.length === 0) return 0;
+  const recent = gustHistory.slice(-6); // last 6 hours
+  const threshold = 12; // m/s considered "strong"
+  const count = recent.filter(v => v >= threshold).length;
+  return Math.round((count / recent.length) * 100);
+}
+// --- end new helpers ---
+
 function Sparkline({ data, color = "#0b5cff", height = 40 }: { data: number[]; color?: string; height?: number }) {
   if (!data || data.length === 0) return null;
   const w = 200;
@@ -135,6 +165,11 @@ export default function Produtores() {
 
   const tempHistory = useMemo(() => generateHistoryFromNow((weather as any)?.temperature, 24, 3).map((d) => d.value), [weather]);
   const humHistory = useMemo(() => generateHistoryFromNow((weather as any)?.humidity, 24, 6).map((d) => d.value), [weather]);
+
+  // soil moisture and wind gust histories derived from weather
+  const soilHistory = useMemo(() => generateSoilMoistureFromHumidity((weather as any)?.humidity, 24).map(d => d.value), [weather]);
+  const gustHistory = useMemo(() => generateWindGustHistory((weather as any)?.windSpeed, 24).map(d => d.value), [weather]);
+  const strongWindProb = useMemo(() => estimateStrongWindProbability(gustHistory), [gustHistory]);
 
   const forecast = useMemo(() => generateForecast((weather as any)?.temperature, (weather as any)?.humidity, 7), [weather]);
 
@@ -328,6 +363,37 @@ export default function Produtores() {
                 )}
               </div>
 
+              {/* NEW: Soil moisture forecast / history */}
+              <div className="card">
+                <h4>Umidade do Solo (estimada)</h4>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div>
+                    <div className="muted small">Últimas 24h (estim.)</div>
+                    <div style={{ fontWeight: 700, fontSize: 20 }}>{soilHistory.length ? `${(soilHistory[soilHistory.length -1]).toFixed(1)}%` : '-'}</div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <Sparkline data={soilHistory} color="#10b981" height={48} />
+                  </div>
+                </div>
+                <p className="muted small" style={{ marginTop: 8 }}>Valores estimados a partir da umidade do ar (para referência)</p>
+              </div>
+              {/* NEW: Strong wind / gusts stats */}
+              <div className="card">
+                <h4>Risco de Ventos Fortes</h4>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div>
+                    <div className="muted small">Probabilidade (últimas 6h)</div>
+                    <div style={{ fontWeight: 800, fontSize: 20, color: strongWindProb >= 50 ? '#ef4444' : (strongWindProb >= 25 ? '#f59e0b' : '#16a34a') }}>
+                      {strongWindProb}%
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="muted small">Rajadas (últimas 24h)</div>
+                    <Sparkline data={gustHistory} color="#7c3aed" height={48} />
+                  </div>
+                </div>
+                <p className="muted small" style={{ marginTop: 8 }}>Rajadas estimadas em m/s — verifique previsões oficiais para ações críticas.</p>
+              </div>
               <div className="card">
                 <h4>Notificações / Estatísticas</h4>
                 <p>Número de notificações: {selectedPlot.notifications?.length ?? 0}</p>
