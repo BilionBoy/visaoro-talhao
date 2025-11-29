@@ -138,11 +138,65 @@ export default function Produtores() {
 
   const forecast = useMemo(() => generateForecast((weather as any)?.temperature, (weather as any)?.humidity, 7), [weather]);
 
+  // sidebar resizing / collapse (local to this page)
+  const MIN_ASIDE = 220;
+  const MAX_ASIDE = 640;
+  const DEFAULT_ASIDE = 360;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try { return Number(localStorage.getItem("produtores:asideWidth")) || DEFAULT_ASIDE; } catch { return DEFAULT_ASIDE; }
+  });
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("produtores:asideCollapsed") === "1"; } catch { return false; }
+  });
+  const draggingRef = useRef(false);
+
+  useEffect(() => {
+    try { localStorage.setItem("produtores:asideWidth", String(sidebarWidth)); } catch {}
+  }, [sidebarWidth]);
+  useEffect(() => {
+    try { localStorage.setItem("produtores:asideCollapsed", collapsed ? "1" : "0"); } catch {}
+  }, [collapsed]);
+
+  // pointer drag handlers
+  const startDrag = (ev: React.PointerEvent) => {
+    if (window.innerWidth <= 900) return; // disable dragging on small screens
+    (ev.target as Element).setPointerCapture(ev.pointerId);
+    draggingRef.current = true;
+    const onMove = (e: PointerEvent) => {
+      if (!draggingRef.current) return;
+      const newW = Math.max(MIN_ASIDE, Math.min(MAX_ASIDE, e.clientX));
+      setSidebarWidth(newW);
+    };
+    const onUp = (e: PointerEvent) => {
+      draggingRef.current = false;
+      try { (ev.target as Element).releasePointerCapture(ev.pointerId); } catch {}
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  };
+
   return (
     <div className={`prod-page ${darkMode ? "dark" : ""}`}>
-      <aside className="prod-aside">
+      <aside
+        className={`prod-aside ${collapsed ? "collapsed" : ""}`}
+        style={{ width: collapsed ? 56 : sidebarWidth }}
+      >
         <div className="prod-aside-header">
-          <h2>Produtores — Talhões</h2>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <h2 style={{ margin: 0 }}>Produtores — Talhões</h2>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="button"
+                title={collapsed ? "Expandir sidebar" : "Recolher sidebar"}
+                onClick={() => setCollapsed((s) => !s)}
+                aria-label="Toggle sidebar"
+              >
+                {collapsed ? "»" : "«"}
+              </button>
+            </div>
+          </div>
           <div className="muted">Total: {polygons.length}</div>
         </div>
 
@@ -187,8 +241,16 @@ export default function Produtores() {
           </div>
         </div>
       </aside>
+      {/* resize handle (desktop only) */}
+      <div
+        className="resize-handle"
+        onPointerDown={startDrag}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Redimensionar sidebar"
+      />
 
-      <main className="prod-main">
+       <main className="prod-main">
         {!selectedPlot ? (
           <div className="empty">Selecione um talhão à esquerda para ver estatísticas</div>
         ) : (

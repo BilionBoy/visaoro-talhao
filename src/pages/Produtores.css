@@ -35,6 +35,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  transition: width .16s ease;
+  overflow: hidden;
+  min-width: 56px;
 }
 .prod-aside-header { margin-bottom: 4px; }
 .prod-list { overflow-y: auto; padding-right: 6px; flex: 1; }
@@ -86,9 +89,47 @@
 }
 @media (max-width: 900px) {
   .prod-page { flex-direction: column; }
-  .prod-aside { width: 100%; height: auto; order: 0; }
-  .prod-main { order: 1; padding: 12px; }
-  .prod-grid { grid-template-columns: 1fr; }
+
+  .prod-aside {
+    width: 100% !important;
+    min-width: 0;
+    order: 0;
+    height: auto;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    display: block;
+  }
+
+  /* when collapsed on mobile, keep only compact header visible */
+  .prod-aside.collapsed {
+    height: 56px;
+    overflow: hidden;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .prod-aside.collapsed .prod-list,
+  .prod-aside.collapsed .prod-aside-footer,
+  .prod-aside.collapsed .prod-item { display: none; }
+  .prod-aside.collapsed .prod-aside-header .muted { display: none; }
+  .prod-aside.collapsed h2 { font-size: 1rem; margin: 0; }
+
+  /* ensure header layout is compact and toggle button visible */
+  .prod-aside .prod-aside-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  /* hide resize handle on mobile */
+  .resize-handle { display: none; }
+
+  /* main content sits below the top bar */
+  .prod-main {
+    order: 1;
+    padding: 12px;
+  }
 }
 
 /* cards */
@@ -164,3 +205,41 @@
   .notif-item { padding: 10px; }
   .priority-badge { padding: 6px 8px; font-size: 11px; }
 }
+
+/* sidebar resize/collapse */
+.prod-aside {
+  transition: width .16s ease;
+  overflow: hidden;
+  min-width: 56px;
+}
+.prod-aside.collapsed {
+  width: 56px !important;
+}
+.prod-aside .prod-list { opacity: 1; transition: opacity .12s ease; }
+.prod-aside.collapsed .prod-list { opacity: 0; pointer-events: none; }
+
+/* tiny header when collapsed */
+.prod-aside.collapsed h2 { font-size: 0; line-height: 0; }
+.prod-aside.collapsed .prod-item { padding-left: 8px; padding-right: 8px; }
+
+/* resize handle between aside and main */
+.resize-handle {
+  width: 8px;
+  cursor: col-resize;
+  background: linear-gradient(90deg, rgba(0,0,0,0.02), rgba(0,0,0,0.04));
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  z-index: 50;
+}
+@media (max-width:900px) {
+  .resize-handle { display: none; }
+  .prod-aside { width: 100% !important; min-width: 0; }
+  .prod-page { flex-direction: column; }
+}
+
+/* ensure main area respects aside width when resized */
+.prod-main { transition: margin-left .16s ease; }
+
+/* small visual hint while dragging (applies to document body when dragging, optional) */
+html.dragging, body.dragging { cursor: col-resize !important; }
